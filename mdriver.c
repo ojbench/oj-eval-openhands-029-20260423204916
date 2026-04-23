@@ -7,8 +7,8 @@
 #include "mm.h"
 #include "memlib.h"
 
-#define MAX_TRACE_OPS 100000
-#define MAX_PTRS 100000
+#define MAX_TRACE_OPS 50000
+#define MAX_PTRS 50000
 
 typedef struct {
     enum { ALLOC, FREE, REALLOC, CALLOC } type;
@@ -91,6 +91,11 @@ static int run_trace() {
     int i;
     void *ptr;
     
+    if (max_index >= MAX_PTRS) {
+        fprintf(stderr, "ERROR: max_index %d exceeds MAX_PTRS %d\n", max_index, MAX_PTRS);
+        return -1;
+    }
+    
     for (i = 0; i <= max_index; i++) {
         ptr_array[i] = NULL;
     }
@@ -101,9 +106,12 @@ static int run_trace() {
         switch (op->type) {
             case ALLOC:
                 ptr = malloc(op->size);
-                if (!ptr && op->size > 0) return -1;
+                if (!ptr && op->size > 0) {
+                    fprintf(stderr, "ERROR: malloc(%zu) failed at op %d\n", op->size, i);
+                    return -1;
+                }
                 ptr_array[op->index] = ptr;
-                if (ptr) memset(ptr, 0xAA, op->size);
+                if (ptr && op->size > 0) memset(ptr, 0xAA, op->size);
                 break;
                 
             case FREE:
@@ -115,13 +123,19 @@ static int run_trace() {
                 
             case REALLOC:
                 ptr = realloc(ptr_array[op->index], op->size);
-                if (!ptr && op->size > 0) return -1;
+                if (!ptr && op->size > 0) {
+                    fprintf(stderr, "ERROR: realloc(%zu) failed at op %d\n", op->size, i);
+                    return -1;
+                }
                 ptr_array[op->index] = ptr;
                 break;
                 
             case CALLOC:
                 ptr = calloc(op->nmemb, op->size);
-                if (!ptr && op->nmemb * op->size > 0) return -1;
+                if (!ptr && op->nmemb * op->size > 0) {
+                    fprintf(stderr, "ERROR: calloc(%zu, %zu) failed at op %d\n", op->nmemb, op->size, i);
+                    return -1;
+                }
                 ptr_array[op->index] = ptr;
                 break;
         }
