@@ -8,6 +8,7 @@
 #include "memlib.h"
 
 #define MAX_TRACE_OPS 100000
+#define MAX_PTRS 100000
 
 typedef struct {
     enum { ALLOC, FREE, REALLOC, CALLOC } type;
@@ -16,9 +17,9 @@ typedef struct {
     size_t nmemb;
 } trace_op_t;
 
-static void **ptr_array = NULL;
+static void *ptr_array[MAX_PTRS];
 static int max_index = 0;
-static trace_op_t *trace_ops = NULL;
+static trace_op_t trace_ops[MAX_TRACE_OPS];
 static int num_ops = 0;
 
 static double get_time() {
@@ -32,9 +33,6 @@ static int read_trace(FILE *fp) {
     int index;
     size_t size, nmemb;
     
-    trace_ops = malloc(MAX_TRACE_OPS * sizeof(trace_op_t));
-    if (!trace_ops) return -1;
-    
     num_ops = 0;
     max_index = 0;
     
@@ -44,6 +42,7 @@ static int read_trace(FILE *fp) {
         switch (cmd) {
             case 'a':  // allocate
                 if (fscanf(fp, "%d %zu", &index, &size) != 2) return -1;
+                if (index >= MAX_PTRS) return -1;
                 trace_ops[num_ops].type = ALLOC;
                 trace_ops[num_ops].index = index;
                 trace_ops[num_ops].size = size;
@@ -53,6 +52,7 @@ static int read_trace(FILE *fp) {
                 
             case 'f':  // free
                 if (fscanf(fp, "%d", &index) != 1) return -1;
+                if (index >= MAX_PTRS) return -1;
                 trace_ops[num_ops].type = FREE;
                 trace_ops[num_ops].index = index;
                 num_ops++;
@@ -60,6 +60,7 @@ static int read_trace(FILE *fp) {
                 
             case 'r':  // realloc
                 if (fscanf(fp, "%d %zu", &index, &size) != 2) return -1;
+                if (index >= MAX_PTRS) return -1;
                 trace_ops[num_ops].type = REALLOC;
                 trace_ops[num_ops].index = index;
                 trace_ops[num_ops].size = size;
@@ -69,6 +70,7 @@ static int read_trace(FILE *fp) {
                 
             case 'c':  // calloc
                 if (fscanf(fp, "%d %zu %zu", &index, &nmemb, &size) != 3) return -1;
+                if (index >= MAX_PTRS) return -1;
                 trace_ops[num_ops].type = CALLOC;
                 trace_ops[num_ops].index = index;
                 trace_ops[num_ops].nmemb = nmemb;
@@ -89,8 +91,9 @@ static int run_trace() {
     int i;
     void *ptr;
     
-    ptr_array = calloc(max_index + 1, sizeof(void *));
-    if (!ptr_array) return -1;
+    for (i = 0; i <= max_index; i++) {
+        ptr_array[i] = NULL;
+    }
     
     for (i = 0; i < num_ops; i++) {
         trace_op_t *op = &trace_ops[i];
@@ -168,8 +171,6 @@ int main(int argc, char *argv[]) {
     printf("Perf index = %.2f (util=%.2f, thru=%.0f Kops/s)\n", 
            perf_index * 100, utilization, throughput / 1000.0);
     
-    if (ptr_array) free(ptr_array);
-    if (trace_ops) free(trace_ops);
     mem_deinit();
     
     return 0;
